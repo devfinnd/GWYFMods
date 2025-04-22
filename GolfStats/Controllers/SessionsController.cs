@@ -15,43 +15,40 @@ public class SessionsController(HybridCache cache, GolfStatsDbContext dbContext)
     private const string CacheKey = "CurrentSession";
 
     [HttpPost("join")]
-    public async Task<IActionResult> JoinSession([FromBody] JoinSessionRequest request)
+    public async Task<IActionResult> JoinSession([FromBody] JoinSessionRequest request, CancellationToken cancellationToken)
     {
-        var sessionId = await GetOrCreateSession();
+        var sessionId = await GetOrCreateSession(cancellationToken);
+        var player = await GetOrCreatePlayer(request.SteamId, request.DisplayName, cancellationToken);
 
-        var session = await dbContext.Sessions.SingleAsync(x => x.Id == sessionId);
+        player.CurrentSessionId = sessionId;
 
-        var player = await dbContext.Players.SingleOrDefaultAsync(x => x.SteamId == request.SteamId)
-                     ?? dbContext.Players.Add(new Player
-                     {
-                         SteamId = request.SteamId,
-                         DisplayName = request.DisplayName
-                     }).Entity;
-
-        player.DisplayName = request.DisplayName;
-
-        session.Players.Add(player);
-
-        player.CurrentSession = session;
-
-        await dbContext.SaveChangesAsync();
+        await dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(new
         {
-            SessionId = session.Id
+            SessionId = sessionId
         });
     }
 
-    [HttpPost("scores")]
-    public async Task<IActionResult> PostScore([FromBody] CreateScoreRequest request)
+    [HttpPost("{sessionId:guid}/start")]
+    public async Task<IActionResult> StartGame([FromRoute] Guid sessionId, CancellationToken cancellationToken)
     {
-        var sessionId = await GetOrCreateSession();
-
         var session = await dbContext.Sessions
-            .SingleAsync(x => x.Id == sessionId);
+            .SingleAsync(x => x.Id == sessionId, cancellationToken);
 
-        session.Scores.Add(new ScoreEntry
+        session.StartedAt = DateTimeOffset.UtcNow;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok();
+    }
+
+    [HttpPost("{sessionId:guid}/scores")]
+    public async Task<IActionResult> PostScore([FromRoute] Guid sessionId, [FromBody] CreateScoreRequest request)
+    {
+        dbContext.Scores.Add(new ScoreEntry
         {
+            SessionId = sessionId,
             Level = request.Level,
             HoleIndex = request.HoleIndex,
             Score = request.Score,
@@ -64,10 +61,27 @@ public class SessionsController(HybridCache cache, GolfStatsDbContext dbContext)
         return Ok();
     }
 
-    [HttpPost("leave")]
-    public async Task<IActionResult> Leave([FromBody] LeaveSessionRequest request, CancellationToken cancellationToken)
+    [HttpPost("{sessionId:guid}/end")]
+    public async Task<IActionResult> End([FromRoute] Guid sessionId, [FromBody] EndGameRequest request, CancellationToken cancellationToken)
     {
-        var sessionId = await GetOrCreateSession();
+        dbContext.Scores.Add(new ScoreEntry
+        {
+            SessionId = sessionId,
+            Level = request.Level,
+            HoleIndex = int.MaxValue,
+            Score = request.TotalScore,
+            SteamId = request.SteamId,
+            Timestamp = request.Timestamp,
+        });
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok();
+    }
+
+    [HttpPost("{sessionId:guid}/leave")]
+    public async Task<IActionResult> Leave([FromRoute] Guid sessionId, [FromBody] LeaveSessionRequest request, CancellationToken cancellationToken)
+    {
         var session = await dbContext.Sessions
             .Include(x => x.Players)
             .SingleAsync(x => x.Id == sessionId, cancellationToken);
@@ -82,34 +96,57 @@ public class SessionsController(HybridCache cache, GolfStatsDbContext dbContext)
             });
         }
 
-        session.Players.Remove(player);
         player.CurrentSession = null;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await dbContext.Entry(session).ReloadAsync(cancellationToken);
 
         if (session.Players.Count == 0)
         {
-            session.FinishedAt = DateTimeOffset.UtcNow;
-            await cache.RemoveAsync(CacheKey, cancellationToken);
+            await Task.WhenAll(
+             dbContext.Sessions
+                .Where(x => x.Id == sessionId)
+                .ExecuteUpdateAsync(spc => spc.SetProperty(s => s.FinishedAt, DateTimeOffset.UtcNow), cancellationToken),
+             cache.RemoveByTagAsync(sessionId.ToString(), cancellationToken).AsTask());
         }
-
-        await dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok();
     }
 
-    private async Task<Guid> GetOrCreateSession()
+    private async Task<Player> GetOrCreatePlayer(string steamId, string displayName, CancellationToken cancellationToken)
     {
+        var player = await dbContext.Players.SingleOrDefaultAsync(x => x.SteamId == steamId, cancellationToken) ?? dbContext.Players.Add(new Player
+        {
+            SteamId = steamId,
+            DisplayName = displayName
+        }).Entity;
+
+        player.DisplayName = displayName;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return player;
+    }
+
+    private async Task<Guid> GetOrCreateSession(CancellationToken cancellationToken)
+    {
+        Guid tempId = Guid.CreateVersion7();
         Guid sessionId = await cache.GetOrCreateAsync(CacheKey, async ct =>
         {
             EntityEntry<GolfSession> sessionEntry = dbContext.Sessions.Add(new GolfSession
             {
-                Id = Guid.CreateVersion7(),
+                Id = tempId,
                 CreatedAt = DateTimeOffset.UtcNow,
             });
 
             await dbContext.SaveChangesAsync(ct);
 
             return sessionEntry.Entity.Id;
-        });
+        }, new HybridCacheEntryOptions
+        {
+            Expiration = TimeSpan.FromHours(1),
+        }, tags: [tempId.ToString()], cancellationToken);
 
         return sessionId;
     }

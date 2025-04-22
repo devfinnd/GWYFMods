@@ -9,13 +9,18 @@
         <RestoreAdditionalProjectSources>
             https://api.nuget.org/v3/index.json;
             https://nuget.bepinex.dev/v3/index.json;
-            https://nuget.samboy.dev/v3/index.json
         </RestoreAdditionalProjectSources>
         <RootNamespace>GolfMods</RootNamespace>
         <GamePath>D:\SteamLibrary\steamapps\common\Golf With Your Friends</GamePath>
+        <RestoreAdditionalProjectSources>
+            https://api.nuget.org/v3/index.json;
+            https://nuget.bepinex.dev/v3/index.json;
+            https://nuget.samboy.dev/v3/index.json
+        </RestoreAdditionalProjectSources>
         <AssemblySearchPaths>
             $(AssemblySearchPaths);
             $(GamePath)\BepInEx\interop;
+            $(GamePath)\BepInEx\core;
         </AssemblySearchPaths>
     </PropertyGroup>
 

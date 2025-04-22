@@ -3,7 +3,7 @@
 namespace GolfMods.Powerups;
 
 [HarmonyPatch(typeof(PowerupStickyGlue))]
-public static class PowerupStickyGluePatches
+public static class HoneyPatches
 {
     [HarmonyPatch(nameof(PowerupStickyGlue.Activate))]
     [HarmonyPrefix]

@@ -7,7 +7,6 @@ public sealed class GolfStatsDbContext(DbContextOptions<GolfStatsDbContext> opti
 {
     public DbSet<GolfSession> Sessions { get; set; }
     public DbSet<Player> Players { get; set; }
-
     public DbSet<ScoreEntry> Scores { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -20,7 +19,7 @@ public sealed class GolfStatsDbContext(DbContextOptions<GolfStatsDbContext> opti
             .WithOne(x => x.Session);
 
         modelBuilder.Entity<ScoreEntry>()
-            .HasKey(x => new { x.SessionId, x.SteamId });
+            .HasKey(x => x.Id);
 
         modelBuilder.Entity<ScoreEntry>()
             .HasOne(x => x.Player)
