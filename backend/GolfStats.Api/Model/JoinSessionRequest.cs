@@ -1,4 +1,4 @@
-﻿namespace GolfStats.Model;
+﻿namespace GolfStats.Api.Model;
 
 public sealed record JoinSessionRequest
 {

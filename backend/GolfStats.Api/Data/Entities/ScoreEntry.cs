@@ -1,4 +1,7 @@
-﻿namespace GolfStats.Data.Entities;
+﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+namespace GolfStats.Api.Data.Entities;
 
 public sealed record ScoreEntry
 {
@@ -10,6 +13,14 @@ public sealed record ScoreEntry
     public required int HoleIndex { get; init; }
     public required int Score { get; init; }
     public required DateTimeOffset Timestamp { get; init; }
+
     public GolfSession Session { get; init; }
-    public Player Player { get; init; }
+}
+
+public sealed class ScoreEntryConfiguration : IEntityTypeConfiguration<ScoreEntry>
+{
+    public void Configure(EntityTypeBuilder<ScoreEntry> builder)
+    {
+        builder.HasKey(x => x.Id);
+    }
 }

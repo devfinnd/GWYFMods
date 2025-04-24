@@ -1,12 +1,12 @@
-using GolfStats.Data;
-using GolfStats.Data.Entities;
-using GolfStats.Model;
+using GolfStats.Api.Data;
+using GolfStats.Api.Data.Entities;
+using GolfStats.Api.Model;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.Extensions.Caching.Hybrid;
 
-namespace GolfStats.Controllers;
+namespace GolfStats.Api.Controllers;
 
 [ApiController]
 [Route("sessions")]
@@ -24,10 +24,7 @@ public class SessionsController(HybridCache cache, GolfStatsDbContext dbContext)
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return Ok(new
-        {
-            SessionId = sessionId
-        });
+        return Ok(new JoinSessionResponse(sessionId));
     }
 
     [HttpPost("{sessionId:guid}/start")]
@@ -49,11 +46,11 @@ public class SessionsController(HybridCache cache, GolfStatsDbContext dbContext)
         dbContext.Scores.Add(new ScoreEntry
         {
             SessionId = sessionId,
+            SteamId = request.SteamId,
             Level = request.Level,
             HoleIndex = request.HoleIndex,
             Score = request.Score,
-            SteamId = request.SteamId,
-            Timestamp = request.Timestamp
+            Timestamp = request.Timestamp,
         });
 
         await dbContext.SaveChangesAsync();
